@@ -55,7 +55,7 @@ net = Net(num_classes=num_classes)
 if args.resume:
     assert os.path.isfile("./weight/ckpt.pth"), "Error: no checkpoint file found!"
     print('Loading from ./weights/ckpt.pth')
-    checkpoint = torch.load("././weights/ckpt.pth")
+    checkpoint = torch.load("./weights/ckpt.pth")
     # import ipdb; ipdb.set_trace()
     net_dict = checkpoint['net_dict']
     net.load_state_dict(net_dict)
@@ -141,7 +141,7 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(checkpoint, '././weights/ckpt.pth')
+        torch.save(checkpoint, './weights/ckpt.pth')
 
     return test_loss/len(testloader), 1.- correct/total
 
@@ -151,6 +151,7 @@ record = {'train_loss':[], 'train_err':[], 'test_loss':[], 'test_err':[]}
 fig = plt.figure()
 ax0 = fig.add_subplot(121, title="loss")
 ax1 = fig.add_subplot(122, title="top1err")
+
 def draw_curve(epoch, train_loss, train_err, test_loss, test_err):
     global record
     record['train_loss'].append(train_loss)
@@ -168,6 +169,16 @@ def draw_curve(epoch, train_loss, train_err, test_loss, test_err):
         ax1.legend()
     fig.savefig("train.jpg")
 
+def draw_curve_train(epoch, train_loss, train_err):
+    x_epoch.append(epoch)
+    ax0.plot(x_epoch, record['train_loss'], 'bo-', label='train')
+    ax1.plot(x_epoch, record['train_err'], 'bo-', label='train')
+    if epoch == 0:
+        ax0.legend()
+        ax1.legend()
+    fig.savefig("train.jpg")
+
+
 # lr decay
 def lr_decay():
     global optimizer
@@ -179,8 +190,9 @@ def lr_decay():
 def main():
     for epoch in range(start_epoch, start_epoch+40):
         train_loss, train_err = train(epoch)
-        test_loss, test_err = test(epoch)
-        draw_curve(epoch, train_loss, train_err, test_loss, test_err)
+        # test_loss, test_err = test(epoch)
+        # draw_curve(epoch, train_loss, train_err, test_loss, test_err)
+        draw_curve_train(epoch, train_loss, train_err)
         if (epoch+1)%20==0:
             lr_decay()
 
