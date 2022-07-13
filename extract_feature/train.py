@@ -47,7 +47,7 @@ testloader = torch.utils.data.DataLoader(
     Market1501("Market-1501-v15.09.15", split="test", transform=transform_test),
     batch_size=16,shuffle=True
 )
-num_classes = 751
+num_classes = 752
 
 # net definition
 start_epoch = 0

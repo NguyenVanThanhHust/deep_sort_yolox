@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from nebulgym.decorators.torch_decorators import accelerate_model, accelerate_dataset
 
 
 class BasicBlock(nn.Module):

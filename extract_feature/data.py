@@ -17,6 +17,7 @@ class Market1501(Dataset):
         super().__init__()
         self.img_dir = join(data_dir, "bounding_box_" + split)
         self.img_list = next(os.walk(self.img_dir))[2]
+        self.img_list = [f for f in self.img_list if f.endswith(".jpg") or f.endswith(".png")]
         tmp_list = [s.split("_")[0] for s in self.img_list]
         tmp_set = set(tmp_list)
         self.ids = list(tmp_set)
