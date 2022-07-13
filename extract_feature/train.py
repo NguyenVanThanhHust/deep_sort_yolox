@@ -41,11 +41,11 @@ transform_test = torchvision.transforms.Compose([
 ])
 trainloader = torch.utils.data.DataLoader(
     Market1501(data_dir="Market-1501-v15.09.15", split="train", transform=transform_train),
-    batch_size=16,shuffle=True
+    batch_size=64,shuffle=True
 )
 testloader = torch.utils.data.DataLoader(
     Market1501("Market-1501-v15.09.15", split="test", transform=transform_test),
-    batch_size=16,shuffle=True
+    batch_size=64,shuffle=True
 )
 num_classes = 752
 
@@ -192,7 +192,7 @@ def main():
         train_loss, train_err = train(epoch)
         # test_loss, test_err = test(epoch)
         # draw_curve(epoch, train_loss, train_err, test_loss, test_err)
-        draw_curve_train(epoch, train_loss, train_err)
+        # draw_curve_train(epoch, train_loss, train_err)
         if (epoch+1)%20==0:
             lr_decay()
 
