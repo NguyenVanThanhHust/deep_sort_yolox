@@ -8,7 +8,7 @@ class Detection(object):
 
     Parameters
     ----------
-    tlwh : array_like
+    ltwh : array_like
         Bounding box in format `(x, y, w, h)`.
     confidence : float
         Detector confidence score.
@@ -17,7 +17,7 @@ class Detection(object):
 
     Attributes
     ----------
-    tlwh : ndarray
+    ltwh : ndarray
         Bounding box in format `(top left x, top left y, width, height)`.
     confidence : ndarray
         Detector confidence score.

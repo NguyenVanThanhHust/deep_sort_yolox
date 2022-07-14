@@ -6,6 +6,9 @@ import os
 
 import cv2
 import numpy as np
+import torch
+import torchvision
+from PIL import Image
 
 from application_util import preprocessing
 from application_util import visualization
@@ -17,8 +20,9 @@ from yolox.data.data_augment import ValTransform
 from yolox.data.datasets import COCO_CLASSES
 from yolox.exp import get_exp
 from yolox.utils import fuse_model, get_model_info, postprocess, vis
-from yolox_detector import get_predictor
 
+from yolox_detector import get_predictor
+from extract_feature.extractor import get_extractor
 
 def create_detections(detection_mat, frame_idx, min_height=0):
     """Create detections for given frame index from the raw detection matrix.
@@ -83,12 +87,27 @@ def run(predictor, output_file, min_confidence,
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     tracker = Tracker(metric)
-    results = []
+    feature_extractor = get_extractor()
 
     cap = cv2.VideoCapture(args.path)
     width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
     height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float
     fps = cap.get(cv2.CAP_PROP_FPS)
+    transform_test = torchvision.transforms.Compose([
+        torchvision.transforms.Resize((128,64)),
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    # font
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    
+    # fontScale
+    fontScale = 1
+    
+    # Blue color in BGR
+    color = (255, 0, 0)
+    
     while True:
         ret_val, frame = cap.read()
         if ret_val:
@@ -100,53 +119,57 @@ def run(predictor, output_file, min_confidence,
             bboxes /= ratio
             cls = output[:, 6]
             scores = output[:, 4] * output[:, 5]
-            dets = np.concatenate((bboxes, np.expand_dims(scores, 1)), axis=1)
-
+            ltwh_boxes = bboxes.copy()
+            x1, y1, x2, y2 = bboxes[:, 0], bboxes[:, 1], bboxes[:, 2], bboxes[:, 3]
+            w, h = x2 - x1, y2 - y1
+            ltwh_boxes[:, 0] = x1
+            ltwh_boxes[:, 1] = y1
+            ltwh_boxes[:, 2] = w
+            ltwh_boxes[:, 3] = h
+            # dets = np.concatenate((bboxes, np.expand_dims(scores, 1)), axis=1)
+            detections = [] 
+            raw_img = img_info["raw_img"]
+            for box, ltwh_box, score in zip(bboxes, ltwh_boxes, scores):
+                x1, y1, x2, y2 = box
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                img_patch = Image.fromarray(raw_img[y1: y2, x1: x2])
+                img_patch = torch.unsqueeze(transform_test(img_patch), dim=0).cuda()
+                feat = feature_extractor(img_patch)
+                feat = torch.squeeze(feat).cpu().detach().numpy()
+                det = Detection(ltwh_box, score, feat)
+                detections.append(det)
             ch = cv2.waitKey(1)
             if ch == 27 or ch == ord("q") or ch == ord("Q"):
                 break
         else:
             break
-
-        # Load image and generate detections.
-        detections = create_detections(
-            seq_info["detections"], frame_idx, min_detection_height)
-        detections = [d for d in detections if d.confidence >= min_confidence]
-
+        
+        draw_boxes = bboxes.copy()
         # Run non-maxima suppression.
-        boxes = np.array([d.tlwh for d in detections])
+        bboxes = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
         indices = preprocessing.non_max_suppression(
-            boxes, nms_max_overlap, scores)
+            bboxes, nms_max_overlap, scores)
         detections = [detections[i] for i in indices]
 
         # Update tracker.
         tracker.predict()
         tracker.update(detections)
-
-        # Update visualization.
-        if display:
-            image = cv2.imread(
-                seq_info["image_filenames"][frame_idx], cv2.IMREAD_COLOR)
-            vis.set_image(image.copy())
-            vis.draw_detections(detections)
-            vis.draw_trackers(tracker.tracks)
-
         # Store results.
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
-            bbox = track.to_tlwh()
-            results.append([
-                frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
-
-    # Run tracker.
-    if display:
-        visualizer = visualization.Visualization(seq_info, update_ms=5)
-    else:
-        visualizer = visualization.NoVisualization(seq_info)
-    visualizer.run(frame_callback)
-
+            ltwh_box = track.to_tlwh()
+            x1, y1, w, h = ltwh_box
+            x2, y2 = x1 + w, y1 + h
+            raw_img = cv2.rectangle(raw_img, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+            raw_img = cv2.putText(raw_img, str(track.track_id), (int(x1), int(y1)) , font, 
+                   fontScale, color, 2, cv2.LINE_AA)
+        for box in draw_boxes:
+            x1, y1, x2, y2 = box
+            raw_img = cv2.rectangle(raw_img, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+        cv2.imshow("image", raw_img)
+        cv2.waitKey(1)
 
 def bool_string(input_string):
     if input_string not in {"True","False"}:
@@ -158,9 +181,6 @@ def parse_args():
     """ Parse command line arguments.
     """
     parser = argparse.ArgumentParser(description="Deep SORT")
-    parser.add_argument(
-        "demo", default="image", help="demo type, eg. image, video and webcam"
-    )
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
 
